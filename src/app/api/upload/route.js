@@ -4,6 +4,14 @@ import { NextResponse } from 'next/server';
 const PASSWORD = process.env.UPLOAD_PASSWORD || 'sanfrancisco2026';
 
 export async function POST(request) {
+  // Check if BLOB token is configured
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    return NextResponse.json(
+      { error: 'Falta configurar BLOB_READ_WRITE_TOKEN en Vercel. Andá a Storage → Blob → Connect to Project.' },
+      { status: 500 }
+    );
+  }
+
   const body = await request.json();
 
   try {
@@ -25,16 +33,21 @@ export async function POST(request) {
             'image/heic',
             'image/heif',
           ],
-          maximumSizeInBytes: 25 * 1024 * 1024, // 25MB — fotos de celu tranqui
+          maximumSizeInBytes: 25 * 1024 * 1024,
         };
       },
       onUploadCompleted: async ({ blob }) => {
+        // No-op: just log
         console.log('Upload completed:', blob.url);
       },
     });
 
     return NextResponse.json(jsonResponse);
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    console.error('Upload API error:', error);
+    return NextResponse.json(
+      { error: error.message || 'Error desconocido al subir la foto' },
+      { status: 400 }
+    );
   }
 }
