@@ -1,6 +1,9 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { upload } from '@vercel/blob/client';
+
+const PASSWORD = 'sanfrancisco2026';
 
 export default function PhotoUpload({ onUploadSuccess }) {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -11,11 +14,11 @@ export default function PhotoUpload({ onUploadSuccess }) {
   const [tuesdayNumber, setTuesdayNumber] = useState('');
   const [tuesdayOptions, setTuesdayOptions] = useState([]);
   const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [uploadError, setUploadError] = useState('');
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    // Calculate tuesday options client-side
     const FIRST_TUESDAY = new Date(2026, 2, 10);
     const LAST_TUESDAY = new Date(2026, 11, 1);
     const months = [
@@ -39,7 +42,7 @@ export default function PhotoUpload({ onUploadSuccess }) {
         value: i + 1,
         label: `Martes #${i + 1} - ${t.getDate()} de ${months[t.getMonth()]}`,
       }))
-      .reverse(); // Most recent first
+      .reverse();
 
     setTuesdayOptions(options);
     if (options.length > 0) {
@@ -49,22 +52,24 @@ export default function PhotoUpload({ onUploadSuccess }) {
 
   const handleUploadClick = () => {
     setShowPasswordModal(true);
-    setError('');
+    setPasswordError('');
     setPassword('');
   };
 
+  // Validate password immediately in the password modal
   const handlePasswordSubmit = () => {
-    if (password === 'sanfrancisco2026' || password === (typeof window !== 'undefined' ? '' : '')) {
-      setShowPasswordModal(false);
-      setShowUploadModal(true);
-      setError('');
-    } else {
-      // We'll validate server-side, but give quick client feedback for known password
-      // Actually let's just move to upload and let server validate
-      setShowPasswordModal(false);
-      setShowUploadModal(true);
-      setError('');
+    if (!password) {
+      setPasswordError('Ingresá la contraseña');
+      return;
     }
+    if (password !== PASSWORD) {
+      setPasswordError('Contraseña incorrecta ❌');
+      return;
+    }
+    // Correct password
+    setShowPasswordModal(false);
+    setShowUploadModal(true);
+    setUploadError('');
   };
 
   const handleFileChange = (e) => {
@@ -72,7 +77,7 @@ export default function PhotoUpload({ onUploadSuccess }) {
     if (selectedFile) {
       setFile(selectedFile);
       const reader = new FileReader();
-      reader.onload = (e) => setPreview(e.target.result);
+      reader.onload = (ev) => setPreview(ev.target.result);
       reader.readAsDataURL(selectedFile);
     }
   };
@@ -81,33 +86,24 @@ export default function PhotoUpload({ onUploadSuccess }) {
     if (!file || !tuesdayNumber) return;
 
     setUploading(true);
-    setError('');
+    setUploadError('');
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('password', password);
-      formData.append('tuesdayNumber', tuesdayNumber);
+      const timestamp = Date.now();
+      const ext = file.name.split('.').pop() || 'jpg';
+      const pathname = `broders/martes-${tuesdayNumber}/${timestamp}.${ext}`;
 
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
+      await upload(pathname, file, {
+        access: 'public',
+        handleUploadUrl: '/api/upload',
+        clientPayload: JSON.stringify({ password }),
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || 'Error al subir la foto');
-        setUploading(false);
-        return;
-      }
-
-      // Success
       setShowUploadModal(false);
       resetForm();
       onUploadSuccess?.();
     } catch (err) {
-      setError('Error de conexión. Intentá de nuevo.');
+      setUploadError(err.message || 'Error al subir la foto. Intentá de nuevo.');
     }
 
     setUploading(false);
@@ -117,7 +113,8 @@ export default function PhotoUpload({ onUploadSuccess }) {
     setFile(null);
     setPreview(null);
     setPassword('');
-    setError('');
+    setPasswordError('');
+    setUploadError('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -151,13 +148,15 @@ export default function PhotoUpload({ onUploadSuccess }) {
                 className="modal__input"
                 placeholder="Ingresá la contraseña..."
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (passwordError) setPasswordError(''); // clear error on typing
+                }}
                 onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()}
                 autoFocus
               />
+              {passwordError && <div className="modal__error">{passwordError}</div>}
             </div>
-
-            {error && <div className="modal__error">{error}</div>}
 
             <div className="modal__actions">
               <button className="modal__btn modal__btn--cancel" onClick={closeAll}>
@@ -177,7 +176,7 @@ export default function PhotoUpload({ onUploadSuccess }) {
 
       {/* Upload Modal */}
       {showUploadModal && (
-        <div className="modal-overlay" onClick={closeAll}>
+        <div className="modal-overlay" onClick={!uploading ? closeAll : undefined}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             {uploading ? (
               <div className="modal__uploading">
@@ -233,7 +232,7 @@ export default function PhotoUpload({ onUploadSuccess }) {
                   </select>
                 </div>
 
-                {error && <div className="modal__error">{error}</div>}
+                {uploadError && <div className="modal__error">{uploadError}</div>}
 
                 <div className="modal__actions">
                   <button className="modal__btn modal__btn--cancel" onClick={closeAll}>
