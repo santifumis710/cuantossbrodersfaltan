@@ -11,7 +11,7 @@ export async function GET() {
       const tuesdayNumber = match ? parseInt(match[1]) : 0;
 
       return {
-        url: blob.url,
+        url: blob.downloadUrl || blob.url,
         tuesdayNumber,
         uploadedAt: blob.uploadedAt,
         pathname: blob.pathname,

@@ -50,13 +50,13 @@ export async function POST(request) {
 
     // Upload to Vercel Blob using server upload (put)
     const blob = await put(pathname, file, {
-      access: 'public',
+      access: 'private',
       addRandomSuffix: true,
     });
 
     return NextResponse.json({
       success: true,
-      url: blob.url,
+      url: blob.downloadUrl || blob.url,
     });
   } catch (error) {
     console.error('Upload error:', error);
