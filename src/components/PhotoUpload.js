@@ -1,9 +1,81 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { upload } from '@vercel/blob/client';
 
 const PASSWORD = 'sanfrancisco2026';
+
+// Compress image in the browser using Canvas API
+// This ensures we stay under the 4.5MB serverless body limit
+async function compressImage(file, maxWidth = 1920, initialQuality = 0.8) {
+  // If file is already very small (< 500KB) and is a web-friendly format, skip
+  if (file.size < 500 * 1024 && ['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    return file;
+  }
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+
+    img.onload = async () => {
+      URL.revokeObjectURL(url);
+
+      let { width, height } = img;
+
+      // Scale down if wider than maxWidth
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+
+      // Try to compress iteratively until under 3.5MB
+      const MAX_SIZE = 3.5 * 1024 * 1024;
+      let quality = initialQuality;
+      let blob = null;
+
+      const tryCompress = (q) =>
+        new Promise((res) => {
+          canvas.toBlob((b) => res(b), 'image/jpeg', q);
+        });
+
+      // Try up to 4 times with decreasing quality
+      for (const q of [quality, 0.6, 0.4, 0.25]) {
+        blob = await tryCompress(q);
+        if (blob && blob.size <= MAX_SIZE) break;
+      }
+
+      if (!blob) {
+        // Last resort: use whatever we got
+        blob = await tryCompress(0.2);
+      }
+
+      if (blob) {
+        const compressedFile = new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), {
+          type: 'image/jpeg',
+          lastModified: Date.now(),
+        });
+        resolve(compressedFile);
+      } else {
+        // If compression totally fails, send original
+        resolve(file);
+      }
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      // If we can't compress, just use the original
+      resolve(file);
+    };
+
+    img.src = url;
+  });
+}
 
 export default function PhotoUpload({ onUploadSuccess }) {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -89,20 +161,32 @@ export default function PhotoUpload({ onUploadSuccess }) {
     setUploadError('');
 
     try {
-      const timestamp = Date.now();
-      const ext = file.name.split('.').pop() || 'jpg';
-      const pathname = `broders/martes-${tuesdayNumber}/${timestamp}.${ext}`;
+      // Compress image in browser before uploading
+      const compressedFile = await compressImage(file);
 
-      await upload(pathname, file, {
-        access: 'public',
-        handleUploadUrl: '/api/upload',
-        clientPayload: JSON.stringify({ password }),
+      // Build FormData
+      const formData = new FormData();
+      formData.append('file', compressedFile);
+      formData.append('password', password);
+      formData.append('tuesdayNumber', tuesdayNumber);
+
+      // Upload via our API route (server upload to Blob)
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
       });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Error al subir la foto');
+      }
 
       setShowUploadModal(false);
       resetForm();
       onUploadSuccess?.();
     } catch (err) {
+      console.error('Upload error:', err);
       setUploadError(err.message || 'Error al subir la foto. Intentá de nuevo.');
     }
 

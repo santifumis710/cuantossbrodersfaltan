@@ -8,6 +8,8 @@ const nextConfig = {
       },
     ],
   },
+  // Allow larger request bodies for photo uploads (up to 10MB after compression)
+  serverExternalPackages: [],
 };
 
 export default nextConfig;
