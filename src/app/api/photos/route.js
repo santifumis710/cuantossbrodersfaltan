@@ -10,8 +10,13 @@ export async function GET() {
       const match = blob.pathname.match(/martes-(\d+)/);
       const tuesdayNumber = match ? parseInt(match[1]) : 0;
 
+      // For private stores, we proxy the image through our API
+      // The browser can't access private blob URLs directly
+      const proxyUrl = `/api/image?url=${encodeURIComponent(blob.url)}`;
+
       return {
-        url: blob.downloadUrl || blob.url,
+        url: proxyUrl,
+        blobUrl: blob.url, // Keep original for delete operations
         tuesdayNumber,
         uploadedAt: blob.uploadedAt,
         pathname: blob.pathname,

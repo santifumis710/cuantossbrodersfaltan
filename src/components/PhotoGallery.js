@@ -43,7 +43,7 @@ export default function PhotoGallery({ refreshKey }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          url: deleteTarget.url,
+          url: deleteTarget.blobUrl || deleteTarget.url,
           password: deletePassword,
         }),
       });

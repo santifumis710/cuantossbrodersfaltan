@@ -74,13 +74,57 @@ Registro de todos los cambios, errores y fixes del proyecto.
 **Solución:** Se cambió el repositorio a **público** en GitHub y se pusheó un commit vacío para triggear un nuevo deploy.
 
 ### Commit trigger (`31c17dd`)
-**Deploy:** ⏳ Pendiente de verificación
+**Deploy:** ✅ Exitoso
 
 ---
 
 ### ⚠️ Warnings corregidos
 - `viewport` y `themeColor` movidos de `metadata` a `viewport` export en `layout.js` (requerido por Next.js 16)
 - Hydration mismatch warning — causado por extensión del browser, no por el código
+
+---
+
+### 🐛 Bug #5: Upload queda cargando infinitamente / "Failed to fetch"
+**Problema:** Al intentar subir una foto, el spinner de carga quedaba girando para siempre sin completar ni dar error. Después de intentar arreglarlo, aparecía "Failed to fetch" (error CORS).
+
+**Causa raíz:** El flujo de **client upload** de `@vercel/blob` usa un sistema de 3 pasos:
+1. Cliente pide token al server (`/api/upload`)
+2. Cliente sube directo a Vercel Blob
+3. **Vercel llama un webhook** de vuelta al server (`onUploadCompleted`)
+
+El paso 3 fallaba silenciosamente — el webhook no podía completar el callback, causando que la Promise del cliente nunca se resuelva (spinner infinito) o tire un error CORS.
+
+**Solución:** Se reescribió completamente el sistema de upload:
+- **Antes:** Client upload (`upload()` + `handleUpload()` + webhook `onUploadCompleted`)
+- **Ahora:** Server upload (`put()`) con FormData — sin webhooks, sin tokens, sin CORS
+- Se agregó **compresión de imagen en el browser** (Canvas API) para respetar el límite de 4.5MB del serverless
+- Compresión iterativa: baja la calidad automáticamente hasta que el archivo quede < 3.5MB
+- Se removió la dependencia de `@vercel/blob/client` en el frontend
+
+**Archivos modificados:**
+- `src/app/api/upload/route.js` — Reescrito con `put()` (server upload)
+- `src/components/PhotoUpload.js` — Reescrito con `fetch()` + FormData + compresión client-side
+
+### Commit fix (`e47268c`)
+**Deploy:** ✅ Exitoso
+
+---
+
+### 🐛 Bug #6: "Cannot use public access on a private store"
+**Problema:** Al subir una foto aparecía el error: "Vercel Blob: Cannot use public access on a private store. The store is configured with private access."
+
+**Causa:** El Blob Store en Vercel fue creado con acceso **privado**, pero el código usaba `access: 'public'` en el `put()`.
+
+**Solución:**
+- Cambiado `access: 'public'` → `access: 'private'` en la API de upload
+- Actualizada la API de fotos para usar `downloadUrl` (URL firmada con token temporal) en vez de `url`, para que las fotos privadas se puedan ver en la galería
+
+**Archivos modificados:**
+- `src/app/api/upload/route.js` — `access: 'private'` + devolver `downloadUrl`
+- `src/app/api/photos/route.js` — Usar `downloadUrl` para las URLs de las fotos
+
+### Commit fix (`86709a0`)
+**Deploy:** ⏳ Pendiente de verificación
 
 ---
 
@@ -93,7 +137,7 @@ Registro de todos los cambios, errores y fixes del proyecto.
 
 ### Stack técnico
 - **Framework:** Next.js 16.2.6 (App Router)
-- **Almacenamiento:** Vercel Blob (client upload)
+- **Almacenamiento:** Vercel Blob (server upload con `put()`, store privado)
 - **Estilos:** Vanilla CSS, tema verde oscuro, mobile-first
 - **Fuente:** Outfit (Google Fonts)
 - **Deploy:** Vercel (plan Hobby)
