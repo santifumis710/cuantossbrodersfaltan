@@ -1,7 +1,7 @@
 import { put } from '@vercel/blob';
 import { NextResponse } from 'next/server';
 
-const PASSWORD = process.env.UPLOAD_PASSWORD || 'sanfrancisco2026';
+const PASSWORD = process.env.UPLOAD_PASSWORD || 'sf26';
 
 export async function POST(request) {
   // Check if BLOB token is configured

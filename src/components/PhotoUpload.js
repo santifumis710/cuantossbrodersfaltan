@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 
-const PASSWORD = 'sanfrancisco2026';
+const PASSWORD = 'sf26';
 
 // Compress image in the browser using Canvas API
 // This ensures we stay under the 4.5MB serverless body limit
